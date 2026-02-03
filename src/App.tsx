@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import LoginForm from './components/LoginForm';
 import Home from './pages/Home';
 import Config from './pages/Config';
+import SimulatorPage from './pages/SimulatorPage';
 
 function ProtectedRoutes() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -24,6 +25,7 @@ function ProtectedRoutes() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/config" element={<Config />} />
+        <Route path="/:slug" element={<SimulatorPage />} />
       </Routes>
     </Router>
   );

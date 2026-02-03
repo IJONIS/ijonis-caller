@@ -90,3 +90,98 @@ export const DEFAULT_PROMPT_CONFIG: PromptConfig = {
 
 // Initialize the default prompt
 DEFAULT_PROMPT_CONFIG.systemPrompt = generateSystemPrompt(DEFAULT_PROMPT_CONFIG);
+
+// ============================================================================
+// Multi-Simulator Types
+// ============================================================================
+
+/**
+ * Simulator metadata displayed in UI and used for routing.
+ */
+export interface SimulatorMetadata {
+  /** URL path segment: "drk", "training-1", etc. */
+  slug: string;
+  /** Display title: "DRK Anrufsimulator" */
+  title: string;
+  /** Display subtitle: "Trainingsumgebung für Spenderhöhungsanrufe" */
+  subtitle: string;
+  /** Hex color code for accent UI elements: "#C41E3A" */
+  accentColor: string;
+  /** ISO timestamp when created */
+  createdAt: string;
+  /** ISO timestamp when last updated */
+  updatedAt: string;
+}
+
+/**
+ * Full simulator configuration combining metadata with prompt config.
+ */
+export interface SimulatorConfig extends PromptConfig {
+  metadata: SimulatorMetadata;
+}
+
+/**
+ * Index of all simulators stored in KV.
+ */
+export interface SimulatorIndex {
+  simulators: SimulatorMetadata[];
+  /** Which simulator "/" redirects to */
+  defaultSlug: string;
+}
+
+/**
+ * Default accent color (DRK red).
+ */
+export const DEFAULT_ACCENT_COLOR = '#C41E3A';
+
+/**
+ * Default simulator metadata for DRK.
+ */
+export const DEFAULT_SIMULATOR_METADATA: SimulatorMetadata = {
+  slug: 'drk',
+  title: 'DRK Anrufsimulator',
+  subtitle: 'Trainingsumgebung für Spenderhöhungsanrufe',
+  accentColor: DEFAULT_ACCENT_COLOR,
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
+};
+
+/**
+ * Default simulator config combining prompt config with metadata.
+ */
+export const DEFAULT_SIMULATOR_CONFIG: SimulatorConfig = {
+  ...DEFAULT_PROMPT_CONFIG,
+  metadata: DEFAULT_SIMULATOR_METADATA,
+};
+
+/**
+ * Validates a hex color code.
+ * @param color - Color string to validate
+ * @returns true if valid hex color (3 or 6 digits with #)
+ */
+export function isValidHexColor(color: string): boolean {
+  return /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(color);
+}
+
+/**
+ * Validates a slug for URL safety.
+ * @param slug - Slug string to validate
+ * @returns true if valid (lowercase alphanumeric with hyphens, 1-50 chars)
+ */
+export function isValidSlug(slug: string): boolean {
+  return /^[a-z0-9]([a-z0-9-]{0,48}[a-z0-9])?$/.test(slug) || /^[a-z0-9]$/.test(slug);
+}
+
+/**
+ * Sanitizes a string into a valid slug.
+ * @param input - String to convert to slug
+ * @returns URL-safe slug
+ */
+export function toSlug(input: string): string {
+  return input
+    .toLowerCase()
+    .replace(/[äöüß]/g, (char) => ({ ä: 'ae', ö: 'oe', ü: 'ue', ß: 'ss' })[char] || char)
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 50);
+}

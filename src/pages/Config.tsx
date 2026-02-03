@@ -1,43 +1,148 @@
 import React, { useState, useEffect } from 'react';
-import type { PromptConfig, ContactTone, RealtimeVoice } from '../types';
-import { DEFAULT_PROMPT_CONFIG, generateSystemPrompt, REALTIME_VOICES } from '../types';
+import { useSearchParams } from 'react-router-dom';
+import type {
+  SimulatorConfig,
+  SimulatorIndex,
+  SimulatorMetadata,
+  ContactTone,
+  RealtimeVoice,
+} from '../types';
+import {
+  DEFAULT_SIMULATOR_CONFIG,
+  DEFAULT_ACCENT_COLOR,
+  generateSystemPrompt,
+  REALTIME_VOICES,
+  isValidHexColor,
+  isValidSlug,
+  toSlug,
+} from '../types';
 
 export default function Config() {
-  const [config, setConfig] = useState<PromptConfig>(DEFAULT_PROMPT_CONFIG);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [simulators, setSimulators] = useState<SimulatorMetadata[]>([]);
+  const [activeSlug, setActiveSlug] = useState<string>('');
+  const [config, setConfig] = useState<SimulatorConfig | null>(null);
+  const [originalSlug, setOriginalSlug] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [message, setMessage] = useState('');
   const [promptManuallyEdited, setPromptManuallyEdited] = useState(false);
+  const [isNewSimulator, setIsNewSimulator] = useState(false);
 
+  // Fetch simulator list on mount
   useEffect(() => {
-    fetchConfig();
+    fetchSimulatorList();
   }, []);
 
-  const fetchConfig = async () => {
+  // Load simulator config when activeSlug changes
+  useEffect(() => {
+    if (activeSlug && !isNewSimulator) {
+      fetchSimulatorConfig(activeSlug);
+    }
+  }, [activeSlug, isNewSimulator]);
+
+  const fetchSimulatorList = async () => {
     try {
-      const response = await fetch('/api/config/get');
-      const data = await response.json();
-      // Merge with defaults and ensure systemPrompt exists
-      const merged = { ...DEFAULT_PROMPT_CONFIG, ...data };
-      if (!merged.systemPrompt) {
-        merged.systemPrompt = generateSystemPrompt(merged);
+      const response = await fetch('/api/simulators/list');
+      const data: SimulatorIndex = await response.json();
+      setSimulators(data.simulators);
+
+      // Check for ?simulator= query param
+      const querySlug = searchParams.get('simulator');
+      if (querySlug && data.simulators.some((s) => s.slug === querySlug)) {
+        setActiveSlug(querySlug);
+      } else if (data.simulators.length > 0) {
+        setActiveSlug(data.simulators[0].slug);
       }
-      setConfig(merged);
     } catch (error) {
-      console.error('Error fetching config:', error);
+      console.error('Error fetching simulator list:', error);
+      setMessage('Fehler beim Laden der Simulatoren');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchSimulatorConfig = async (slug: string) => {
+    setLoading(true);
+    try {
+      const response = await fetch(`/api/simulators/${encodeURIComponent(slug)}/get`);
+      if (!response.ok) {
+        throw new Error('Simulator nicht gefunden');
+      }
+      const data: SimulatorConfig = await response.json();
+      setConfig(data);
+      setOriginalSlug(slug);
+      setPromptManuallyEdited(false);
+    } catch (error) {
+      console.error('Error fetching simulator config:', error);
       setMessage('Fehler beim Laden der Konfiguration');
     } finally {
       setLoading(false);
     }
   };
 
+  const handleTabClick = (slug: string) => {
+    if (slug === activeSlug) return;
+    setIsNewSimulator(false);
+    setActiveSlug(slug);
+    setMessage('');
+    setSearchParams({ simulator: slug });
+  };
+
+  const handleNewSimulator = () => {
+    const now = new Date().toISOString();
+    const newConfig: SimulatorConfig = {
+      ...DEFAULT_SIMULATOR_CONFIG,
+      metadata: {
+        slug: '',
+        title: '',
+        subtitle: '',
+        accentColor: DEFAULT_ACCENT_COLOR,
+        createdAt: now,
+        updatedAt: now,
+      },
+      systemPrompt: generateSystemPrompt(DEFAULT_SIMULATOR_CONFIG),
+    };
+    setConfig(newConfig);
+    setOriginalSlug('');
+    setIsNewSimulator(true);
+    setActiveSlug('__new__');
+    setMessage('');
+    setPromptManuallyEdited(false);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!config) return;
+
+    // Validate slug
+    if (!config.metadata.slug || !isValidSlug(config.metadata.slug)) {
+      setMessage('Fehler: Ungültiger Slug (nur Kleinbuchstaben, Zahlen und Bindestriche)');
+      return;
+    }
+
+    // Validate title
+    if (!config.metadata.title.trim()) {
+      setMessage('Fehler: Titel ist erforderlich');
+      return;
+    }
+
+    // Validate accent color
+    if (!isValidHexColor(config.metadata.accentColor)) {
+      setMessage('Fehler: Ungültige Akzentfarbe (Format: #RRGGBB)');
+      return;
+    }
+
     setSaving(true);
     setMessage('');
 
     try {
-      const response = await fetch('/api/config/update', {
+      const endpoint = isNewSimulator
+        ? `/api/simulators/${encodeURIComponent(config.metadata.slug)}/update`
+        : `/api/simulators/${encodeURIComponent(originalSlug)}/update`;
+
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(config),
@@ -47,6 +152,17 @@ export default function Config() {
 
       if (response.ok) {
         setMessage('Konfiguration erfolgreich gespeichert ✓');
+
+        // Refresh simulator list
+        await fetchSimulatorList();
+
+        // Update state for slug changes
+        if (data.slugChanged || isNewSimulator) {
+          setActiveSlug(config.metadata.slug);
+          setOriginalSlug(config.metadata.slug);
+          setSearchParams({ simulator: config.metadata.slug });
+        }
+        setIsNewSimulator(false);
       } else {
         setMessage(`Fehler: ${data.error}`);
       }
@@ -58,28 +174,86 @@ export default function Config() {
     }
   };
 
-  const updateField = <K extends keyof PromptConfig>(key: K, value: PromptConfig[K]) => {
+  const handleDelete = async () => {
+    if (!config || isNewSimulator) return;
+    if (simulators.length <= 1) {
+      setMessage('Der letzte Simulator kann nicht gelöscht werden');
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Simulator "${config.metadata.title}" wirklich löschen?`
+    );
+    if (!confirmed) return;
+
+    setDeleting(true);
+    setMessage('');
+
+    try {
+      const response = await fetch(
+        `/api/simulators/${encodeURIComponent(originalSlug)}/delete`,
+        { method: 'DELETE' }
+      );
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setMessage('Simulator gelöscht ✓');
+        // Refresh list and select first remaining
+        await fetchSimulatorList();
+      } else {
+        setMessage(`Fehler: ${data.error}`);
+      }
+    } catch (error) {
+      console.error('Error deleting simulator:', error);
+      setMessage('Fehler beim Löschen des Simulators');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const updateField = <K extends keyof SimulatorConfig>(
+    key: K,
+    value: SimulatorConfig[K]
+  ) => {
     setConfig((prev) => {
+      if (!prev) return prev;
       const updated = { ...prev, [key]: value };
       // Auto-regenerate prompt if not manually edited
-      if (key !== 'systemPrompt' && !promptManuallyEdited) {
+      if (key !== 'systemPrompt' && key !== 'metadata' && !promptManuallyEdited) {
         updated.systemPrompt = generateSystemPrompt(updated);
       }
       return updated;
     });
   };
 
+  const updateMetadata = <K extends keyof SimulatorMetadata>(
+    key: K,
+    value: SimulatorMetadata[K]
+  ) => {
+    setConfig((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        metadata: {
+          ...prev.metadata,
+          [key]: value,
+        },
+      };
+    });
+  };
+
   const handlePromptChange = (value: string) => {
     setPromptManuallyEdited(true);
-    setConfig((prev) => ({ ...prev, systemPrompt: value }));
+    setConfig((prev) => (prev ? { ...prev, systemPrompt: value } : prev));
   };
 
   const regeneratePrompt = () => {
     setPromptManuallyEdited(false);
-    setConfig((prev) => ({ ...prev, systemPrompt: generateSystemPrompt(prev) }));
+    setConfig((prev) => (prev ? { ...prev, systemPrompt: generateSystemPrompt(prev) } : prev));
   };
 
-  if (loading) {
+  if (loading && simulators.length === 0) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-gray-600">Lädt...</div>
@@ -88,187 +262,312 @@ export default function Config() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-4xl mx-auto">
-        <h1 className="text-3xl font-bold text-gray-900 mb-8">
-          Anruf-Konfiguration
-        </h1>
-
-        <form onSubmit={handleSubmit} className="space-y-8">
-          {/* Agent Settings */}
-          <Section title="Agent-Einstellungen">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Agent Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={config.agentName}
-                  onChange={(e) => updateField('agentName', e.target.value)}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-redcross focus:ring-redcross"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Kontaktton *
-                </label>
-                <select
-                  required
-                  value={config.contactTone}
-                  onChange={(e) => updateField('contactTone', e.target.value as ContactTone)}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-redcross focus:ring-redcross"
-                >
-                  <option value="Formal">Formal (Sie)</option>
-                  <option value="Casual">Casual (locker)</option>
-                  <option value="Friendly">Freundlich (herzlich)</option>
-                </select>
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  Stimme *
-                </label>
-                <select
-                  required
-                  value={config.voice}
-                  onChange={(e) => updateField('voice', e.target.value as RealtimeVoice)}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-redcross focus:ring-redcross"
-                >
-                  {REALTIME_VOICES.map((voice) => (
-                    <option key={voice.value} value={voice.value}>
-                      {voice.label}{voice.premium ? ' ⭐ (Premium)' : ''}
-                    </option>
-                  ))}
-                </select>
-                <p className="mt-1 text-xs text-gray-500">
-                  Premium-Stimmen (Marin, Cedar) bieten die beste Audioqualität.
-                </p>
-              </div>
-            </div>
-          </Section>
-
-          {/* Donor Information */}
-          <Section title="Spender-Informationen">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Spender Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={config.donorName}
-                  onChange={(e) => updateField('donorName', e.target.value)}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-redcross focus:ring-redcross"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Spendenhistorie *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="z.B. 2 Jahre"
-                  value={config.donationHistory}
-                  onChange={(e) => updateField('donationHistory', e.target.value)}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-redcross focus:ring-redcross"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Aktueller Betrag (€) *
-                </label>
-                <input
-                  type="number"
-                  required
-                  min="1"
-                  value={config.currentAmount}
-                  onChange={(e) => updateField('currentAmount', Number(e.target.value))}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-redcross focus:ring-redcross"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Ziel-Betrag (€) *
-                </label>
-                <input
-                  type="number"
-                  required
-                  min={config.currentAmount + 1}
-                  value={config.targetAmount}
-                  onChange={(e) => updateField('targetAmount', Number(e.target.value))}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-redcross focus:ring-redcross"
-                />
-              </div>
-            </div>
-            <div className="mt-4">
-              <label className="block text-sm font-medium text-gray-700">
-                Zusätzliche Anweisungen
-              </label>
-              <textarea
-                rows={2}
-                value={config.additionalInstructions}
-                onChange={(e) => updateField('additionalInstructions', e.target.value)}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-redcross focus:ring-redcross"
-                placeholder="Spezielle Taktiken oder Hinweise für den Agent..."
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-3xl font-bold text-gray-900">Simulator-Konfiguration</h1>
+          <a
+            href="/"
+            className="text-sm text-gray-600 hover:text-gray-900 flex items-center space-x-1"
+          >
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <path
+                fillRule="evenodd"
+                d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z"
+                clipRule="evenodd"
               />
-            </div>
-          </Section>
+            </svg>
+            <span>Zurück zum Simulator</span>
+          </a>
+        </div>
 
-          {/* System Prompt */}
-          <Section title="System Prompt">
-            <div className="flex justify-between items-center mb-2">
-              <p className="text-sm text-gray-500">
-                Der vollständige Prompt wird aus den obigen Feldern generiert.
-                Sie können ihn hier direkt bearbeiten oder überschreiben.
-              </p>
+        {/* Tabs */}
+        <div className="border-b border-gray-200 mb-6">
+          <nav className="-mb-px flex space-x-4 overflow-x-auto">
+            {simulators.map((sim) => (
               <button
-                type="button"
-                onClick={regeneratePrompt}
-                className="text-sm text-redcross hover:text-red-700 underline"
+                key={sim.slug}
+                onClick={() => handleTabClick(sim.slug)}
+                className={`whitespace-nowrap py-3 px-4 border-b-2 font-medium text-sm transition-colors ${
+                  activeSlug === sim.slug
+                    ? 'border-gray-900 text-gray-900'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
               >
-                Neu generieren
+                {sim.title || sim.slug}
               </button>
-            </div>
-            <textarea
-              value={config.systemPrompt}
-              onChange={(e) => handlePromptChange(e.target.value)}
-              rows={16}
-              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-redcross focus:ring-redcross font-mono text-sm leading-relaxed"
-            />
-            {promptManuallyEdited && (
-              <p className="mt-1 text-xs text-amber-600">
-                Prompt wurde manuell bearbeitet. Änderungen an den Feldern oben werden nicht automatisch übernommen.
-              </p>
-            )}
-          </Section>
-
-          {/* Submit Button */}
-          <div>
+            ))}
             <button
-              type="submit"
-              disabled={saving}
-              className="w-full bg-redcross text-white py-3 px-4 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-redcross focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-            >
-              {saving ? 'Speichert...' : 'Konfiguration speichern'}
-            </button>
-          </div>
-
-          {/* Success/Error Message */}
-          {message && (
-            <div
-              className={`p-4 rounded-md ${
-                message.includes('✓')
-                  ? 'bg-green-50 text-green-800'
-                  : 'bg-red-50 text-red-800'
+              onClick={handleNewSimulator}
+              className={`whitespace-nowrap py-3 px-4 border-b-2 font-medium text-sm transition-colors ${
+                activeSlug === '__new__'
+                  ? 'border-gray-900 text-gray-900'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               }`}
             >
-              {message}
+              + Neu
+            </button>
+          </nav>
+        </div>
+
+        {/* Form */}
+        {config && (
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Simulator Settings */}
+            <Section title="Simulator-Einstellungen">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Slug *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="z.B. drk-training"
+                    value={config.metadata.slug}
+                    onChange={(e) => updateMetadata('slug', toSlug(e.target.value))}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-gray-500 focus:ring-gray-500"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    URL: /{config.metadata.slug || 'slug'}
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Akzentfarbe *
+                  </label>
+                  <div className="mt-1 flex items-center space-x-2">
+                    <input
+                      type="text"
+                      required
+                      placeholder="#C41E3A"
+                      value={config.metadata.accentColor}
+                      onChange={(e) => updateMetadata('accentColor', e.target.value)}
+                      className="block w-full rounded-md border-gray-300 shadow-sm focus:border-gray-500 focus:ring-gray-500"
+                    />
+                    <div
+                      className="w-10 h-10 rounded-md border border-gray-300 shrink-0"
+                      style={{
+                        backgroundColor: isValidHexColor(config.metadata.accentColor)
+                          ? config.metadata.accentColor
+                          : '#ccc',
+                      }}
+                    />
+                  </div>
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Titel *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="z.B. DRK Anrufsimulator"
+                    value={config.metadata.title}
+                    onChange={(e) => updateMetadata('title', e.target.value)}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-gray-500 focus:ring-gray-500"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Untertitel
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="z.B. Trainingsumgebung für Spenderhöhungsanrufe"
+                    value={config.metadata.subtitle}
+                    onChange={(e) => updateMetadata('subtitle', e.target.value)}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-gray-500 focus:ring-gray-500"
+                  />
+                </div>
+              </div>
+            </Section>
+
+            {/* Agent Settings */}
+            <Section title="Agent-Einstellungen">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Agent Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={config.agentName}
+                    onChange={(e) => updateField('agentName', e.target.value)}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-gray-500 focus:ring-gray-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Kontaktton *
+                  </label>
+                  <select
+                    required
+                    value={config.contactTone}
+                    onChange={(e) => updateField('contactTone', e.target.value as ContactTone)}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-gray-500 focus:ring-gray-500"
+                  >
+                    <option value="Formal">Formal (Sie)</option>
+                    <option value="Casual">Casual (locker)</option>
+                    <option value="Friendly">Freundlich (herzlich)</option>
+                  </select>
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Stimme *
+                  </label>
+                  <select
+                    required
+                    value={config.voice}
+                    onChange={(e) => updateField('voice', e.target.value as RealtimeVoice)}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-gray-500 focus:ring-gray-500"
+                  >
+                    {REALTIME_VOICES.map((voice) => (
+                      <option key={voice.value} value={voice.value}>
+                        {voice.label}
+                        {voice.premium ? ' ⭐ (Premium)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-xs text-gray-500">
+                    Premium-Stimmen (Marin, Cedar) bieten die beste Audioqualität.
+                  </p>
+                </div>
+              </div>
+            </Section>
+
+            {/* Donor Information */}
+            <Section title="Spender-Informationen">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Spender Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={config.donorName}
+                    onChange={(e) => updateField('donorName', e.target.value)}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-gray-500 focus:ring-gray-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Spendenhistorie *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="z.B. 2 Jahre"
+                    value={config.donationHistory}
+                    onChange={(e) => updateField('donationHistory', e.target.value)}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-gray-500 focus:ring-gray-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Aktueller Betrag (€) *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    value={config.currentAmount}
+                    onChange={(e) => updateField('currentAmount', Number(e.target.value))}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-gray-500 focus:ring-gray-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Ziel-Betrag (€) *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min={config.currentAmount + 1}
+                    value={config.targetAmount}
+                    onChange={(e) => updateField('targetAmount', Number(e.target.value))}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-gray-500 focus:ring-gray-500"
+                  />
+                </div>
+              </div>
+              <div className="mt-4">
+                <label className="block text-sm font-medium text-gray-700">
+                  Zusätzliche Anweisungen
+                </label>
+                <textarea
+                  rows={2}
+                  value={config.additionalInstructions}
+                  onChange={(e) => updateField('additionalInstructions', e.target.value)}
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-gray-500 focus:ring-gray-500"
+                  placeholder="Spezielle Taktiken oder Hinweise für den Agent..."
+                />
+              </div>
+            </Section>
+
+            {/* System Prompt */}
+            <Section title="System Prompt">
+              <div className="flex justify-between items-center mb-2">
+                <p className="text-sm text-gray-500">
+                  Der vollständige Prompt wird aus den obigen Feldern generiert.
+                </p>
+                <button
+                  type="button"
+                  onClick={regeneratePrompt}
+                  className="text-sm text-gray-700 hover:text-gray-900 underline"
+                >
+                  Neu generieren
+                </button>
+              </div>
+              <textarea
+                value={config.systemPrompt}
+                onChange={(e) => handlePromptChange(e.target.value)}
+                rows={16}
+                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-gray-500 focus:ring-gray-500 font-mono text-sm leading-relaxed"
+              />
+              {promptManuallyEdited && (
+                <p className="mt-1 text-xs text-amber-600">
+                  Prompt wurde manuell bearbeitet. Änderungen an den Feldern oben werden nicht automatisch übernommen.
+                </p>
+              )}
+            </Section>
+
+            {/* Actions */}
+            <div className="flex items-center justify-between space-x-4">
+              <button
+                type="submit"
+                disabled={saving}
+                className="flex-1 bg-gray-900 text-white py-3 px-4 rounded-md hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+              >
+                {saving ? 'Speichert...' : isNewSimulator ? 'Simulator erstellen' : 'Speichern'}
+              </button>
+              {!isNewSimulator && simulators.length > 1 && (
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="px-4 py-3 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-md font-medium transition-colors disabled:opacity-50"
+                >
+                  {deleting ? 'Löscht...' : 'Löschen'}
+                </button>
+              )}
             </div>
-          )}
-        </form>
+
+            {/* Success/Error Message */}
+            {message && (
+              <div
+                className={`p-4 rounded-md ${
+                  message.includes('✓')
+                    ? 'bg-green-50 text-green-800'
+                    : 'bg-red-50 text-red-800'
+                }`}
+              >
+                {message}
+              </div>
+            )}
+          </form>
+        )}
       </div>
     </div>
   );

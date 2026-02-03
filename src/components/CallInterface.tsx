@@ -1,16 +1,84 @@
-import { useState, useRef, useEffect } from 'react';
-import { CallState, type PromptConfig } from '../types';
+import { useState, useRef, useEffect, useMemo } from 'react';
+import { CallState, type SimulatorConfig, DEFAULT_ACCENT_COLOR } from '../types';
 import { OpenAIRealtimeConnection } from '../lib/openai-realtime';
 import PhoneVisualization from './PhoneVisualization';
 import RingingPhone from './RingingPhone';
 
-export default function CallInterface() {
+interface CallInterfaceProps {
+  /** Simulator configuration - if not provided, will fetch from API */
+  simulatorConfig?: SimulatorConfig;
+  /** Simulator slug for API fetching (used when simulatorConfig not provided) */
+  slug?: string;
+}
+
+/**
+ * Generate a darker shade of a hex color for gradient effects.
+ */
+function darkenHex(hex: string, percent: number = 15): string {
+  const num = parseInt(hex.replace('#', ''), 16);
+  const r = Math.max(0, (num >> 16) - Math.round(2.55 * percent));
+  const g = Math.max(0, ((num >> 8) & 0x00ff) - Math.round(2.55 * percent));
+  const b = Math.max(0, (num & 0x0000ff) - Math.round(2.55 * percent));
+  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
+}
+
+/**
+ * Generate a lighter shade of a hex color for backgrounds.
+ */
+function lightenHex(hex: string, percent: number = 90): string {
+  const num = parseInt(hex.replace('#', ''), 16);
+  const r = Math.min(255, (num >> 16) + Math.round(2.55 * percent));
+  const g = Math.min(255, ((num >> 8) & 0x00ff) + Math.round(2.55 * percent));
+  const b = Math.min(255, (num & 0x0000ff) + Math.round(2.55 * percent));
+  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
+}
+
+export default function CallInterface({ simulatorConfig, slug }: CallInterfaceProps) {
   const [callState, setCallState] = useState<CallState>(CallState.IDLE);
   const [error, setError] = useState<string>('');
   const [isAgentSpeaking, setIsAgentSpeaking] = useState(false);
+  const [config, setConfig] = useState<SimulatorConfig | null>(simulatorConfig || null);
+  const [isLoading, setIsLoading] = useState(!simulatorConfig);
 
   const connectionRef = useRef<OpenAIRealtimeConnection | null>(null);
   const speakingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Extract display values from config
+  const title = config?.metadata?.title || 'DRK Anrufsimulator';
+  const subtitle = config?.metadata?.subtitle || 'Trainingsumgebung für Spenderhöhungsanrufe';
+  const accentColor = config?.metadata?.accentColor || DEFAULT_ACCENT_COLOR;
+  const accentColorDark = useMemo(() => darkenHex(accentColor), [accentColor]);
+  const accentColorLight = useMemo(() => lightenHex(accentColor), [accentColor]);
+
+  // Fetch config if not provided
+  useEffect(() => {
+    if (simulatorConfig) {
+      setConfig(simulatorConfig);
+      setIsLoading(false);
+      return;
+    }
+
+    const fetchConfig = async () => {
+      try {
+        const endpoint = slug
+          ? `/api/simulators/${encodeURIComponent(slug)}/get`
+          : '/api/config/get';
+        const response = await fetch(endpoint);
+        if (!response.ok) {
+          throw new Error('Simulator nicht gefunden');
+        }
+        const data = await response.json();
+        setConfig(data);
+      } catch (err) {
+        console.error('Error fetching config:', err);
+        setError(err instanceof Error ? err.message : 'Konfiguration konnte nicht geladen werden');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchConfig();
+  }, [simulatorConfig, slug]);
 
   useEffect(() => {
     return () => {
@@ -38,11 +106,13 @@ export default function CallInterface() {
     setCallState(CallState.CONNECTING);
 
     try {
-      const configResponse = await fetch('/api/config/get');
-      const promptConfig: PromptConfig = await configResponse.json();
+      // Use the already loaded config
+      if (!config) {
+        throw new Error('Konfiguration nicht geladen');
+      }
 
       connectionRef.current = new OpenAIRealtimeConnection({
-        promptConfig,
+        promptConfig: config,
         onAgentSpeaking: () => {
           setIsAgentSpeaking(true);
           setCallState(CallState.AGENT_SPEAKING);
@@ -91,6 +161,18 @@ export default function CallInterface() {
     }, 2000);
   };
 
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-gray-50 to-gray-100">
+        <div className="text-center">
+          <div className="animate-spin h-8 w-8 border-4 border-gray-300 border-t-gray-600 rounded-full mx-auto mb-4" />
+          <p className="text-gray-600">Lade Simulator...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-gray-50 to-gray-100">
       <div className="w-full max-w-md">
@@ -120,17 +202,25 @@ export default function CallInterface() {
         {callState === CallState.IDLE && (
           <div className="bg-white rounded-3xl shadow-2xl overflow-hidden">
             {/* Hero Section */}
-            <div className="bg-gradient-to-br from-[var(--drk-red)] to-[var(--drk-red-dark)] px-8 pt-12 pb-8 text-center">
-              <div className="inline-flex items-center justify-center w-20 h-20 bg-white/20 backdrop-blur-sm rounded-3xl mb-6">
+            <div
+              className="px-8 pt-12 pb-8 text-center"
+              style={{
+                background: `linear-gradient(to bottom right, ${accentColor}, ${accentColorDark})`,
+              }}
+            >
+              <div
+                className="inline-flex items-center justify-center w-20 h-20 backdrop-blur-sm rounded-3xl mb-6"
+                style={{ backgroundColor: 'rgba(255, 255, 255, 0.2)' }}
+              >
                 <svg className="w-10 h-10 text-white" fill="currentColor" viewBox="0 0 20 20">
                   <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
                 </svg>
               </div>
               <h1 className="text-3xl font-bold text-white mb-3">
-                DRK Anrufsimulator
+                {title}
               </h1>
-              <p className="text-red-100 text-sm">
-                Trainingsumgebung f&uuml;r Spendenerh&ouml;hungsanrufe
+              <p style={{ color: 'rgba(255, 255, 255, 0.8)' }} className="text-sm">
+                {subtitle}
               </p>
             </div>
 
@@ -139,7 +229,10 @@ export default function CallInterface() {
               {/* Call to action button */}
               <button
                 onClick={startCall}
-                className="w-full bg-gradient-to-r from-[var(--drk-red)] to-[var(--drk-red-dark)] hover:shadow-xl text-white py-4 px-8 rounded-2xl font-semibold transition-all duration-200 hover:scale-[1.02] flex items-center justify-center space-x-3"
+                className="w-full hover:shadow-xl text-white py-4 px-8 rounded-2xl font-semibold transition-all duration-200 hover:scale-[1.02] flex items-center justify-center space-x-3"
+                style={{
+                  background: `linear-gradient(to right, ${accentColor}, ${accentColorDark})`,
+                }}
               >
                 <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
                   <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
@@ -150,8 +243,11 @@ export default function CallInterface() {
               {/* Feature list */}
               <div className="space-y-4">
                 <div className="flex items-start space-x-3">
-                  <div className="flex-shrink-0 w-6 h-6 rounded-full bg-red-100 flex items-center justify-center mt-0.5">
-                    <svg className="w-4 h-4 text-[var(--drk-red)]" fill="currentColor" viewBox="0 0 20 20">
+                  <div
+                    className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center mt-0.5"
+                    style={{ backgroundColor: accentColorLight }}
+                  >
+                    <svg className="w-4 h-4" style={{ color: accentColor }} fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                     </svg>
                   </div>
@@ -189,7 +285,7 @@ export default function CallInterface() {
 
         {/* RINGING State */}
         {callState === CallState.RINGING && (
-          <RingingPhone onAnswer={answerCall} onDecline={declineCall} />
+          <RingingPhone onAnswer={answerCall} onDecline={declineCall} accentColor={accentColor} />
         )}
 
         {/* CONNECTING State */}
@@ -197,9 +293,15 @@ export default function CallInterface() {
           <div className="text-center bg-white rounded-2xl shadow-xl p-10 border border-gray-100">
             <div className="relative w-20 h-20 mx-auto mb-6">
               <div className="absolute inset-0 border-4 border-gray-100 rounded-full"></div>
-              <div className="absolute inset-0 border-4 border-transparent border-t-[var(--drk-red)] rounded-full animate-spin"></div>
-              <div className="absolute inset-3 flex items-center justify-center bg-red-50 rounded-full">
-                <svg className="w-6 h-6 text-[var(--drk-red)]" fill="currentColor" viewBox="0 0 20 20">
+              <div
+                className="absolute inset-0 border-4 border-transparent rounded-full animate-spin"
+                style={{ borderTopColor: accentColor }}
+              ></div>
+              <div
+                className="absolute inset-3 flex items-center justify-center rounded-full"
+                style={{ backgroundColor: accentColorLight }}
+              >
+                <svg className="w-6 h-6" style={{ color: accentColor }} fill="currentColor" viewBox="0 0 20 20">
                   <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
                 </svg>
               </div>
@@ -218,7 +320,7 @@ export default function CallInterface() {
               <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-100">
                 <div>
                   <h2 className="text-xl font-bold text-gray-900">Aktiver Anruf</h2>
-                  <p className="text-sm text-gray-500">Deutsches Rotes Kreuz</p>
+                  <p className="text-sm text-gray-500">{title}</p>
                 </div>
                 <div className="flex items-center space-x-2 bg-green-50 px-3 py-1.5 rounded-full">
                   <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
@@ -226,12 +328,15 @@ export default function CallInterface() {
                 </div>
               </div>
 
-              <PhoneVisualization isSpeaking={isAgentSpeaking} />
+              <PhoneVisualization isSpeaking={isAgentSpeaking} accentColor={accentColor} />
             </div>
 
             <button
               onClick={endCall}
-              className="group w-full bg-gradient-to-r from-[var(--drk-red)] to-[var(--drk-red-dark)] hover:shadow-lg text-white py-4 px-6 rounded-xl font-semibold transition-all duration-200 hover:scale-[1.02] flex items-center justify-center space-x-2"
+              className="group w-full hover:shadow-lg text-white py-4 px-6 rounded-xl font-semibold transition-all duration-200 hover:scale-[1.02] flex items-center justify-center space-x-2"
+              style={{
+                background: `linear-gradient(to right, ${accentColor}, ${accentColorDark})`,
+              }}
             >
               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                 <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />

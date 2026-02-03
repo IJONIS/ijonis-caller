@@ -1,8 +1,11 @@
+import { DEFAULT_ACCENT_COLOR } from '../types';
+
 interface PhoneVisualizationProps {
   isSpeaking: boolean;
+  accentColor?: string;
 }
 
-export default function PhoneVisualization({ isSpeaking }: PhoneVisualizationProps) {
+export default function PhoneVisualization({ isSpeaking, accentColor = DEFAULT_ACCENT_COLOR }: PhoneVisualizationProps) {
   return (
     <div className="flex flex-col items-center justify-center space-y-6 py-4">
       {/* Visualization */}
@@ -10,15 +13,25 @@ export default function PhoneVisualization({ isSpeaking }: PhoneVisualizationPro
         {/* Ripples when speaking */}
         {isSpeaking && (
           <>
-            <div className="absolute w-32 h-32 bg-[var(--drk-red)] rounded-full opacity-10 animate-ripple" />
-            <div className="absolute w-32 h-32 bg-[var(--drk-red)] rounded-full opacity-10 animate-ripple" style={{ animationDelay: '0.5s' }} />
+            <div
+              className="absolute w-32 h-32 rounded-full opacity-10 animate-ripple"
+              style={{ backgroundColor: accentColor }}
+            />
+            <div
+              className="absolute w-32 h-32 rounded-full opacity-10 animate-ripple"
+              style={{ backgroundColor: accentColor, animationDelay: '0.5s' }}
+            />
           </>
         )}
 
         {/* Center Icon */}
-        <div className={`relative w-24 h-24 rounded-full flex items-center justify-center shadow-lg transition-all ${
-          isSpeaking ? 'bg-[var(--drk-red)] scale-110' : 'bg-gray-400'
-        }`}>
+        <div
+          className="relative w-24 h-24 rounded-full flex items-center justify-center shadow-lg transition-all"
+          style={{
+            backgroundColor: isSpeaking ? accentColor : '#9ca3af',
+            transform: isSpeaking ? 'scale(1.1)' : 'scale(1)',
+          }}
+        >
           <svg className="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
             <path
               strokeLinecap="round"
@@ -31,10 +44,17 @@ export default function PhoneVisualization({ isSpeaking }: PhoneVisualizationPro
 
       {/* Status */}
       <div className="text-center">
-        <div className={`inline-flex items-center space-x-2 px-4 py-2 rounded-full ${
-          isSpeaking ? 'bg-[var(--drk-red)] text-white' : 'bg-gray-200 text-gray-700'
-        }`}>
-          <div className={`w-2 h-2 rounded-full ${isSpeaking ? 'bg-white animate-pulse' : 'bg-gray-600'}`} />
+        <div
+          className="inline-flex items-center space-x-2 px-4 py-2 rounded-full"
+          style={{
+            backgroundColor: isSpeaking ? accentColor : '#e5e7eb',
+            color: isSpeaking ? 'white' : '#374151',
+          }}
+        >
+          <div
+            className={`w-2 h-2 rounded-full ${isSpeaking ? 'animate-pulse' : ''}`}
+            style={{ backgroundColor: isSpeaking ? 'white' : '#4b5563' }}
+          />
           <span className="text-sm font-medium uppercase">
             {isSpeaking ? 'Agent spricht' : 'Zuhören'}
           </span>
