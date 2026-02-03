@@ -1,6 +1,10 @@
 @import "tailwindcss";
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
+@theme {
+  --color-redcross: #ED1B2E;
+}
+
 :root {
   --drk-red: #ED1B2E;
   --drk-red-dark: #C41623;

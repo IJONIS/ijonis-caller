@@ -1,16 +1,6 @@
 import { kv } from '@vercel/kv';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-
-interface PromptConfig {
-  agentName: string;
-  donorName: string;
-  currentAmount: number;
-  targetAmount: number;
-  donationHistory: string;
-  contactTone: 'Formal' | 'Casual' | 'Friendly';
-  additionalInstructions?: string;
-  systemPrompt: string;
-}
+import { type PromptConfig } from '../_shared/prompt';
 
 export default async function handler(
   req: VercelRequest,
