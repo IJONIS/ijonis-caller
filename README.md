@@ -1,6 +1,6 @@
-# Red Cross AI Caller - Proof of Concept
+# Ijonis AI Caller - Proof of Concept
 
-A conversational AI system that simulates phone calls from Red Cross agents to donors, using OpenAI's Realtime API for natural German voice conversations.
+A conversational AI system that simulates phone calls using OpenAI's Realtime API for natural German voice conversations.
 
 ## Features
 

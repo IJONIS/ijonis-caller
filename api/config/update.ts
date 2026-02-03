@@ -46,7 +46,7 @@ export default async function handler(
       return res.status(400).json({ error: 'System prompt is required' });
     }
 
-    await kv.set('red-cross-caller:prompt-config', config);
+    await kv.set('ijonis-caller:prompt-config', config);
 
     return res.status(200).json({ success: true, config });
   } catch (error) {

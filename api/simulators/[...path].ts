@@ -44,10 +44,10 @@ interface SimulatorConfig extends PromptConfig {
   metadata: SimulatorMetadata;
 }
 
-const KV_INDEX_KEY = 'red-cross-caller:simulators:index';
+const KV_INDEX_KEY = 'ijonis-caller:simulators:index';
 
 function getKvKey(slug: string): string {
-  return `red-cross-caller:simulators:${slug}:config`;
+  return `ijonis-caller:simulators:${slug}:config`;
 }
 
 function isValidHexColor(color: string): boolean {
@@ -58,18 +58,73 @@ function isValidSlug(slug: string): boolean {
   return /^[a-z0-9]([a-z0-9-]{0,48}[a-z0-9])?$/.test(slug) || /^[a-z0-9]$/.test(slug);
 }
 
+/**
+ * Catch-all handler for /api/simulators/[slug]/[action]
+ * Routes: GET /api/simulators/{slug}/get
+ *         POST /api/simulators/{slug}/update
+ *         DELETE /api/simulators/{slug}/delete
+ */
 export default async function handler(
   req: VercelRequest,
   res: VercelResponse
 ) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+  // Parse the path segments from the catch-all parameter
+  const pathParam = req.query.path;
+  const pathSegments = Array.isArray(pathParam) ? pathParam : [pathParam];
+
+  if (pathSegments.length !== 2) {
+    return res.status(400).json({ error: 'Invalid path. Expected /api/simulators/{slug}/{action}' });
   }
 
-  const { slug } = req.query;
+  const [slug, action] = pathSegments;
 
   if (!slug || typeof slug !== 'string') {
     return res.status(400).json({ error: 'Slug is required' });
+  }
+
+  // Route based on action and method
+  switch (action) {
+    case 'get':
+      return handleGet(req, res, slug);
+    case 'update':
+      return handleUpdate(req, res, slug);
+    case 'delete':
+      return handleDelete(req, res, slug);
+    default:
+      return res.status(404).json({ error: `Unknown action: ${action}` });
+  }
+}
+
+async function handleGet(
+  req: VercelRequest,
+  res: VercelResponse,
+  slug: string
+) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const config = await kv.get<SimulatorConfig>(getKvKey(slug));
+
+    if (!config) {
+      return res.status(404).json({ error: 'Simulator not found' });
+    }
+
+    return res.status(200).json(config);
+  } catch (error) {
+    console.error('Error fetching simulator:', error);
+    return res.status(500).json({ error: 'Failed to fetch simulator' });
+  }
+}
+
+async function handleUpdate(
+  req: VercelRequest,
+  res: VercelResponse,
+  slug: string
+) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
@@ -108,9 +163,14 @@ export default async function handler(
     }
 
     // Get current index
-    const index = await kv.get<SimulatorIndex>(KV_INDEX_KEY);
+    let index = await kv.get<SimulatorIndex>(KV_INDEX_KEY);
+
+    // Initialize index if it doesn't exist (first simulator creation)
     if (!index) {
-      return res.status(500).json({ error: 'Simulator index not found' });
+      index = {
+        simulators: [],
+        defaultSlug: '',
+      };
     }
 
     // Check if this is an existing simulator or new one
@@ -183,6 +243,11 @@ export default async function handler(
         : index.simulators.map((s) => (s.slug === slug ? config.metadata : s)),
     };
 
+    // Set default slug if this is the first simulator
+    if (!updatedIndex.defaultSlug && updatedIndex.simulators.length > 0) {
+      updatedIndex.defaultSlug = newSlug;
+    }
+
     // If default slug was changed, update it
     if (slugChanged && index.defaultSlug === slug) {
       updatedIndex.defaultSlug = newSlug;
@@ -199,5 +264,61 @@ export default async function handler(
   } catch (error) {
     console.error('Error updating simulator:', error);
     return res.status(500).json({ error: 'Failed to update simulator' });
+  }
+}
+
+async function handleDelete(
+  req: VercelRequest,
+  res: VercelResponse,
+  slug: string
+) {
+  if (req.method !== 'DELETE') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    // Get current index
+    const index = await kv.get<SimulatorIndex>(KV_INDEX_KEY);
+    if (!index) {
+      return res.status(500).json({ error: 'Simulator index not found' });
+    }
+
+    // Check if simulator exists
+    const simulatorExists = index.simulators.some((s) => s.slug === slug);
+    if (!simulatorExists) {
+      return res.status(404).json({ error: 'Simulator not found' });
+    }
+
+    // Prevent deleting last simulator
+    if (index.simulators.length <= 1) {
+      return res.status(400).json({ error: 'Cannot delete the last simulator' });
+    }
+
+    // Remove from index
+    const updatedSimulators = index.simulators.filter((s) => s.slug !== slug);
+
+    // Update default slug if we're deleting the default
+    let newDefaultSlug = index.defaultSlug;
+    if (index.defaultSlug === slug) {
+      newDefaultSlug = updatedSimulators[0].slug;
+    }
+
+    const updatedIndex: SimulatorIndex = {
+      simulators: updatedSimulators,
+      defaultSlug: newDefaultSlug,
+    };
+
+    // Delete config and update index
+    await kv.del(getKvKey(slug));
+    await kv.set(KV_INDEX_KEY, updatedIndex);
+
+    return res.status(200).json({
+      success: true,
+      deletedSlug: slug,
+      newDefaultSlug: index.defaultSlug === slug ? newDefaultSlug : undefined,
+    });
+  } catch (error) {
+    console.error('Error deleting simulator:', error);
+    return res.status(500).json({ error: 'Failed to delete simulator' });
   }
 }

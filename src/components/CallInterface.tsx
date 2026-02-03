@@ -44,7 +44,7 @@ export default function CallInterface({ simulatorConfig, slug }: CallInterfacePr
   const speakingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Extract display values from config
-  const title = config?.metadata?.title || 'DRK Anrufsimulator';
+  const title = config?.metadata?.title || 'Ijonis Anrufsimulator';
   const subtitle = config?.metadata?.subtitle || 'Trainingsumgebung für Spenderhöhungsanrufe';
   const accentColor = config?.metadata?.accentColor || DEFAULT_ACCENT_COLOR;
   const accentColorDark = useMemo(() => darkenHex(accentColor), [accentColor]);

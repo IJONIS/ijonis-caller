@@ -1,10 +1,10 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code when working with the **Red Cross AI Caller** POC project.
+This file provides guidance to Claude Code when working with the **Ijonis AI Caller** POC project.
 
 ## Project Overview
 
-A conversational AI system simulating phone calls from Red Cross agents to donors using OpenAI's Realtime API over WebRTC for natural German voice conversations.
+A conversational AI system simulating phone calls using OpenAI's Realtime API over WebRTC for natural German voice conversations.
 
 **Tech Stack:** Vite + React + TypeScript + Tailwind CSS + OpenAI Realtime API (WebRTC) + Vercel Functions + Vercel KV
 
@@ -504,6 +504,6 @@ vercel --prod
 
 ---
 
-**Last Updated**: 2026-01-29
+**Last Updated**: 2026-02-03
 **Project Status**: Proof of Concept
-**Maintainer**: Internal Red Cross Team
+**Maintainer**: Ijonis Team

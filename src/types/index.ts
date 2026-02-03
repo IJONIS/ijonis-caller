@@ -99,9 +99,9 @@ DEFAULT_PROMPT_CONFIG.systemPrompt = generateSystemPrompt(DEFAULT_PROMPT_CONFIG)
  * Simulator metadata displayed in UI and used for routing.
  */
 export interface SimulatorMetadata {
-  /** URL path segment: "drk", "training-1", etc. */
+  /** URL path segment: "demo", "training-1", etc. */
   slug: string;
-  /** Display title: "DRK Anrufsimulator" */
+  /** Display title: "Ijonis Anrufsimulator" */
   title: string;
   /** Display subtitle: "Trainingsumgebung für Spenderhöhungsanrufe" */
   subtitle: string;
@@ -130,16 +130,16 @@ export interface SimulatorIndex {
 }
 
 /**
- * Default accent color (DRK red).
+ * Default accent color.
  */
 export const DEFAULT_ACCENT_COLOR = '#C41E3A';
 
 /**
- * Default simulator metadata for DRK.
+ * Default simulator metadata.
  */
 export const DEFAULT_SIMULATOR_METADATA: SimulatorMetadata = {
-  slug: 'drk',
-  title: 'DRK Anrufsimulator',
+  slug: 'demo',
+  title: 'Ijonis Anrufsimulator',
   subtitle: 'Trainingsumgebung für Spenderhöhungsanrufe',
   accentColor: DEFAULT_ACCENT_COLOR,
   createdAt: new Date().toISOString(),

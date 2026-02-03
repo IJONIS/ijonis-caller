@@ -59,7 +59,7 @@ export default async function handler(
 
   try {
     const storedConfig = await kv.get<Partial<PromptConfig>>(
-      'red-cross-caller:prompt-config'
+      'ijonis-caller:prompt-config'
     );
 
     // Merge stored config with defaults

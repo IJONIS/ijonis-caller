@@ -28,7 +28,7 @@ interface SimulatorIndex {
   defaultSlug: string;
 }
 
-// Default accent color (DRK red)
+// Default accent color
 const DEFAULT_ACCENT_COLOR = '#C41E3A';
 
 // Generate system prompt from config
@@ -74,8 +74,8 @@ function createDefaultSimulatorConfig(): SimulatorConfig {
     ...baseConfig,
     systemPrompt: generateSystemPrompt(baseConfig),
     metadata: {
-      slug: 'drk',
-      title: 'DRK Anrufsimulator',
+      slug: 'demo',
+      title: 'Ijonis Anrufsimulator',
       subtitle: 'Trainingsumgebung für Spenderhöhungsanrufe',
       accentColor: DEFAULT_ACCENT_COLOR,
       createdAt: now,
@@ -92,10 +92,10 @@ let simulatorIndex: SimulatorIndex;
 function initializeStorage() {
   if (simulatorConfigs.size === 0) {
     const defaultConfig = createDefaultSimulatorConfig();
-    simulatorConfigs.set('drk', defaultConfig);
+    simulatorConfigs.set('demo', defaultConfig);
     simulatorIndex = {
       simulators: [defaultConfig.metadata],
-      defaultSlug: 'drk',
+      defaultSlug: 'demo',
     };
   }
 }

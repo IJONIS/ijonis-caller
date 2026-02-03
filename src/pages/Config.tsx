@@ -362,7 +362,7 @@ export default function Config() {
                   <input
                     type="text"
                     required
-                    placeholder="z.B. DRK Anrufsimulator"
+                    placeholder="z.B. Ijonis Anrufsimulator"
                     value={config.metadata.title}
                     onChange={(e) => updateMetadata('title', e.target.value)}
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-gray-500 focus:ring-gray-500"

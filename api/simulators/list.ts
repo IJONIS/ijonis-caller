@@ -44,8 +44,8 @@ interface SimulatorConfig extends PromptConfig {
   metadata: SimulatorMetadata;
 }
 
-const KV_INDEX_KEY = 'red-cross-caller:simulators:index';
-const KV_OLD_CONFIG_KEY = 'red-cross-caller:prompt-config';
+const KV_INDEX_KEY = 'ijonis-caller:simulators:index';
+const KV_OLD_CONFIG_KEY = 'ijonis-caller:prompt-config';
 const DEFAULT_ACCENT_COLOR = '#C41E3A';
 
 function generateSystemPrompt(config: Omit<PromptConfig, 'systemPrompt'>): string {
@@ -92,8 +92,8 @@ async function migrateFromOldConfig(): Promise<SimulatorIndex | null> {
 
   const now = new Date().toISOString();
   const metadata: SimulatorMetadata = {
-    slug: 'drk',
-    title: 'DRK Anrufsimulator',
+    slug: 'demo',
+    title: 'Ijonis Anrufsimulator',
     subtitle: 'Trainingsumgebung für Spenderhöhungsanrufe',
     accentColor: DEFAULT_ACCENT_COLOR,
     createdAt: now,
@@ -115,11 +115,11 @@ async function migrateFromOldConfig(): Promise<SimulatorIndex | null> {
 
   const index: SimulatorIndex = {
     simulators: [metadata],
-    defaultSlug: 'drk',
+    defaultSlug: 'demo',
   };
 
   // Save new format
-  await kv.set(`red-cross-caller:simulators:drk:config`, simulatorConfig);
+  await kv.set(`ijonis-caller:simulators:demo:config`, simulatorConfig);
   await kv.set(KV_INDEX_KEY, index);
 
   // Delete old key after successful migration
@@ -149,8 +149,8 @@ export default async function handler(
     if (!index) {
       const now = new Date().toISOString();
       const defaultMetadata: SimulatorMetadata = {
-        slug: 'drk',
-        title: 'DRK Anrufsimulator',
+        slug: 'demo',
+        title: 'Ijonis Anrufsimulator',
         subtitle: 'Trainingsumgebung für Spenderhöhungsanrufe',
         accentColor: DEFAULT_ACCENT_COLOR,
         createdAt: now,
@@ -159,7 +159,7 @@ export default async function handler(
 
       index = {
         simulators: [defaultMetadata],
-        defaultSlug: 'drk',
+        defaultSlug: 'demo',
       };
 
       // Create default simulator config
@@ -169,7 +169,7 @@ export default async function handler(
         metadata: defaultMetadata,
       };
 
-      await kv.set(`red-cross-caller:simulators:drk:config`, defaultConfig);
+      await kv.set(`ijonis-caller:simulators:demo:config`, defaultConfig);
       await kv.set(KV_INDEX_KEY, index);
     }
 

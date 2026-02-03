@@ -43,7 +43,7 @@ export default function LoginForm() {
               </svg>
             </div>
             <h1 className="text-2xl font-bold text-gray-900">
-              DRK AI Caller
+              Ijonis AI Caller
             </h1>
             <p className="text-gray-500 mt-2">
               Bitte Passwort eingeben
@@ -110,7 +110,7 @@ export default function LoginForm() {
         </div>
 
         <p className="text-center text-sm text-gray-500 mt-6">
-          Deutsches Rotes Kreuz • POC
+          Ijonis • POC
         </p>
       </div>
     </div>
