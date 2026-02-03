@@ -2,12 +2,26 @@ import { loadEnv, type Plugin } from 'vite';
 
 const DEFAULT_CONFIG = {
   agentName: 'Sarah',
+  agentRole: 'Spenderbetreuung',
+  agentDialect: 'Hamburg',
+  agentYearsExperience: 3,
+
+  speakingPace: 'Normal',
+  useFillers: true,
+  showEmotion: true,
+
+  followUpOnTopics: true,
+  allowDigressions: true,
+  waitForDonorFirst: true,
+
   donorName: 'Max Mustermann',
   currentAmount: 20,
   targetAmount: 35,
   donationHistory: '2 Jahre',
   contactTone: 'Friendly',
+
   additionalInstructions: '',
+  customPersonality: '',
 };
 
 let storedConfig = { ...DEFAULT_CONFIG };
@@ -22,6 +36,47 @@ export function apiPlugin(): Plugin {
     },
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
+        // Handle POST /api/auth/verify
+        if (req.url === '/api/auth/verify' && req.method === 'POST') {
+          let body = '';
+          req.on('data', chunk => {
+            body += chunk.toString();
+          });
+          req.on('end', () => {
+            try {
+              const { password } = JSON.parse(body);
+              const appPassword = env.APP_PASSWORD;
+
+              // If no password configured, allow access
+              if (!appPassword) {
+                res.setHeader('Content-Type', 'application/json');
+                res.statusCode = 200;
+                res.end(JSON.stringify({ success: true, message: 'No password configured' }));
+                return;
+              }
+
+              if (!password) {
+                res.statusCode = 400;
+                res.end(JSON.stringify({ error: 'Password required' }));
+                return;
+              }
+
+              if (password === appPassword) {
+                res.setHeader('Content-Type', 'application/json');
+                res.statusCode = 200;
+                res.end(JSON.stringify({ success: true }));
+              } else {
+                res.statusCode = 401;
+                res.end(JSON.stringify({ error: 'Invalid password' }));
+              }
+            } catch {
+              res.statusCode = 400;
+              res.end(JSON.stringify({ error: 'Invalid JSON' }));
+            }
+          });
+          return;
+        }
+
         // Handle GET /api/config/get
         if (req.url === '/api/config/get' && req.method === 'GET') {
           res.setHeader('Content-Type', 'application/json');
@@ -43,7 +98,7 @@ export function apiPlugin(): Plugin {
               res.setHeader('Content-Type', 'application/json');
               res.statusCode = 200;
               res.end(JSON.stringify(storedConfig));
-            } catch (error) {
+            } catch {
               res.statusCode = 400;
               res.end(JSON.stringify({ error: 'Invalid JSON' }));
             }
