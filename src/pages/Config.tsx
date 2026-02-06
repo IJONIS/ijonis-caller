@@ -259,7 +259,7 @@ export default function Config() {
     setConfig((prev) => (prev ? { ...prev, systemPrompt: generateSystemPrompt(prev) } : prev));
   };
 
-  const updatePersona = (index: number, field: keyof Persona, value: string) => {
+  const updatePersona = (index: number, field: keyof Persona, value: Persona[keyof Persona]) => {
     setConfig((prev) => {
       if (!prev) return prev;
       const personas = [...(prev.personas || [])];
@@ -594,6 +594,64 @@ export default function Config() {
                             onChange={(e) => updatePersona(i, 'prompt', e.target.value)}
                             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-gray-500 focus:ring-gray-500 text-sm"
                           />
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-sm text-gray-600">
+                              Stimme
+                              <span className="text-gray-400 ml-1">(optional)</span>
+                            </label>
+                            <select
+                              value={persona.voice || ''}
+                              onChange={(e) =>
+                                updatePersona(
+                                  i,
+                                  'voice',
+                                  e.target.value ? (e.target.value as RealtimeVoice) : undefined
+                                )
+                              }
+                              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-gray-500 focus:ring-gray-500 text-sm"
+                            >
+                              <option value="">Standard ({config.voice})</option>
+                              {REALTIME_VOICES.map((v) => (
+                                <option key={v.value} value={v.value}>
+                                  {v.label}{v.premium ? ' ⭐' : ''}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-sm text-gray-600">
+                              Geschwindigkeit
+                              <span className="text-gray-400 ml-1">(optional)</span>
+                            </label>
+                            <div className="mt-1 flex items-center space-x-2">
+                              <input
+                                type="range"
+                                min={SPEECH_SPEED_MIN}
+                                max={SPEECH_SPEED_MAX}
+                                step={SPEECH_SPEED_STEP}
+                                value={persona.speechSpeed ?? config.speechSpeed ?? SPEECH_SPEED_DEFAULT}
+                                onChange={(e) => updatePersona(i, 'speechSpeed', Number(e.target.value))}
+                                className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                              />
+                              <span className="w-12 text-center text-xs font-medium text-gray-600">
+                                {persona.speechSpeed != null
+                                  ? `${persona.speechSpeed.toFixed(2)}x`
+                                  : 'Std.'}
+                              </span>
+                              {persona.speechSpeed != null && (
+                                <button
+                                  type="button"
+                                  onClick={() => updatePersona(i, 'speechSpeed', undefined)}
+                                  className="text-xs text-gray-400 hover:text-gray-600"
+                                  title="Zurücksetzen auf Standard"
+                                >
+                                  ✕
+                                </button>
+                              )}
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>

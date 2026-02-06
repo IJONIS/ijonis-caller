@@ -134,10 +134,12 @@ export default function CallInterface({ simulatorConfig, slug }: CallInterfacePr
         throw new Error('Konfiguration nicht geladen');
       }
 
-      // Combine system prompt with selected persona prompt
+      // Combine system prompt with selected persona prompt and apply overrides
       const effectiveConfig: SimulatorConfig = {
         ...config,
         systemPrompt: buildPromptWithPersona(config.systemPrompt, selectedPersona),
+        ...(selectedPersona?.voice && { voice: selectedPersona.voice }),
+        ...(selectedPersona?.speechSpeed != null && { speechSpeed: selectedPersona.speechSpeed }),
       };
 
       connectionRef.current = new OpenAIRealtimeConnection({

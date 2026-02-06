@@ -57,6 +57,10 @@ export interface Persona {
   name: string;
   /** Text block appended to the system prompt */
   prompt: string;
+  /** Optional voice override — if set, overrides the simulator's default voice */
+  voice?: RealtimeVoice;
+  /** Optional speech speed override — if set, overrides the simulator's default speed */
+  speechSpeed?: number;
 }
 
 /** Maximum number of personas per simulator */
